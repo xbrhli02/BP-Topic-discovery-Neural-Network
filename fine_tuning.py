@@ -2,10 +2,14 @@ from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer, pipeline
 import evaluate
 import numpy as np
+import argparse
+import torch
 
+#Tokenize function
 def tokenize_function(examples):
     return tokenizer(examples["text"], padding="max_length", truncation=True)
 
+#Compute predictions
 def compute_metrics(eval_pred):
     print(eval_pred)
     logits = eval_pred.predictions
@@ -15,6 +19,19 @@ def compute_metrics(eval_pred):
     labels = labels.tolist()
     return {"predictions": predictions, "references": labels}
 
+
+#PARSER
+parser = argparse.ArgumentParser()
+parser.add_argument("-od", "--output_dir", help="directory for training output", type=str, default="OUTPUT_DIR")
+parser.add_argument("-ld", "--logging_dir", help="directory for logs from training output", type=str, default="LOGGING_DIR")
+parser.add_argument("-lr", "--learning_rate", help="learning rate for model training", type=float, default=2e-5)
+parser.add_argument("-e", "--num_of_epochs", help="number of epochs for model training", type=int, default=5)
+parser.add_argument("-wd", "--weight_decay", help="weight decay for model training", type=float, default=0.05)
+parser.add_argument("-m", "--model_name", help="desired name of the model", type=float, default="TEST_MODEL")
+
+args = parser.parse_args()
+
+#load dataset and tokenizer
 tweets = load_dataset('cardiffnlp/tweet_topic_multi')
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
@@ -43,27 +60,26 @@ ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 
 tokenized_tweets = tweets.map(tokenize_function, batched=True)
 
-small_train_dataset = tokenized_tweets["train_2021"].shuffle(seed=60).select(range(1000))
-small_eval_dataset = tokenized_tweets["test_2021"].shuffle(seed=60).select(range(1000))
+small_train_dataset = tokenized_tweets["train_2021"]
+small_eval_dataset = tokenized_tweets["test_2021"]
 
 model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=19, 
                                                            problem_type="multi_label_classification", 
                                                            id2label=ID2LABEL, label2id=LABEL2ID)
-
+#Training arguments
 training_args = TrainingArguments(
-    output_dir="TEST_MODEL",
-    learning_rate=2e-5,
-    per_device_train_batch_size=19,
-    per_device_eval_batch_size=19,
-    num_train_epochs=10,
-    weight_decay=0.01,
+    output_dir=args.output_dir,
+    learning_rate=args.learning_rate,
+    logging_dir=args.logging_dir,
+    per_device_train_batch_size=2,
+    per_device_eval_batch_size=2,
+    num_train_epochs=args.num_of_epochs,
+    weight_decay=args.weight_decay,
     evaluation_strategy="epoch",
     save_strategy="epoch",
     load_best_model_at_end=True,
     push_to_hub=False,
 )
-
-metric = evaluate.load("accuracy")
 
 trainer = Trainer(
     model=model,
@@ -75,4 +91,4 @@ trainer = Trainer(
 
 trainer.train()
 
-model.save_pretrained("/mnt/c/Users/vojta/Documents/BP/2023/model")
+model.save_pretrained("/mnt/c/Users/vojta/Documents/BP/2023/model_4")
